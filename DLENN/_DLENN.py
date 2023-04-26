@@ -3,48 +3,45 @@ import math
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import mean_squared_error
+rom sklearn.model_selection import KFold
 
-class FLENN(object):
+class DLENN(object):
     def __init__(
         self,
-        portion_vec = [1],
-        lamda = 1.0,
         weighting_scheme = "extrapolated",
-        smooth_order = 1,
+        n_machine = 1,
+        order = 1,
+        lamda = 1.0,
+        k = 2,
+        random_state = 1,
     ):
-        self.portion_vec = portion_vec
-        self.lamda = lamda
+        
         self.weighting_scheme = weighting_scheme
-        self.smooth_order = smooth_order
+        self.n_machine_per_order = n_machine_per_order
+        self.order = order
+        self.lamda = lamda
+        self.k = k
+        self.random_state = random_state
         
-        
-     
-
+        self.order_constant_vec = np.array([i + 1 for i in range(self.order)] )
+        self.k_vec = np.repeat(self.order_constant_vec * self.k, self.n_machine_per_order)
 
     def fit(self, X, y):
         
-        
-        X_vec, y_vec = self.distribute_data(X, y)
-        
-        assert self.smooth_order <= len(X_vec)
-        
-        
-        
+        kfolder = KFold(n_splits = self.n_machine_per_order * self.order , random_state = self.random_state, shuffle = True)
+
         self.regressor_vec = []
-        
         self.dim = X_vec[0].shape[1]
-        self.sample_size_vec = [X.shape[0] for X in X_vec]
-        for i in range(len(y_vec)):
-            potential_vec = [1, 2, 5,10,20,40,60,80,100,120,150,200,250,300]
-            params = {"n_neighbors" : [n for n in potential_vec if n < max(2,X_vec[i].shape[0]/2)]}
-            cv_regressor = GridSearchCV(estimator = KNeighborsRegressor(), param_grid = params, cv = 3)
-            cv_regressor.fit(X_vec[i], y_vec[i])
-            self.regressor_vec.append(cv_regressor.best_estimator_)
+        
+        for i, (_, test_index) in enumerate(kfolder.split(X)):
+            self.regressor_vec.append( 
+                KNeighborsRegressor(n_neighbors = self.k_vec[i]).fit(X[test_index, :], y[test_index])
+            )
         
         if self.weighting_scheme == "uniform":
-            self.weights = np.repeat(1/len(y_vec), len(y_vec))
+            self.weights = np.repeat(1 / len(self.regressor_vec), len(self.regressor_vec))
         elif self.weighting_scheme == "extrapolated":
-            r_mat = np.array([ [size**(- 2 * i / self.dim) for i in range(self.smooth_order)] for size in self.sample_size_vec])
+            r_mat = np.array([ [k**(- 2 * i / self.dim) for i in range(self.order)] for k in self.k_vec])
             self.weights = (np.linalg.inv(r_mat.T @ r_mat + self.lamda * np.eye(self.smooth_order)) @ r_mat.T)[0]
             if self.weights.sum():
                 self.weights = self.weights / self.weights.sum()
@@ -70,7 +67,7 @@ class FLENN(object):
             Parameter names mapped to their values.
         """
         out = dict()
-        for key in ['portion_vec',"lamda","weighting_scheme","smooth_order"]:
+        for key in ['n_machine',"lamda","weighting_scheme","order","k"]:
             value = getattr(self, key, None)
             if deep and hasattr(value, 'get_params'):
                 deep_items = value.get_params().items()
@@ -115,20 +112,7 @@ class FLENN(object):
         return self.weights @ prediction_by_nodes 
         
         
-    def distribute_data(self, X, y):
-        X_vec = []
-        y_vec = []
-        
-        start_idx = 0
-        for i in range(len(self.portion_vec) - 1):
-            X_vec.append(X[start_idx : (start_idx + int(self.portion_vec[i] * X.shape[0])), :])
-            y_vec.append(y[start_idx : (start_idx + int(self.portion_vec[i] * X.shape[0]))])
-            start_idx += int(self.portion_vec[i] * X.shape[0])
-        
-        X_vec.append(X[start_idx : , :])
-        y_vec.append(y[start_idx : ])
-        
-        return X_vec, y_vec
+    
     
     def score(self, X, y):
         return - mean_squared_error(self.predict(X), y)
