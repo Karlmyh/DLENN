@@ -1,2 +1,2 @@
-# FLENN
-Federated Learning with Extrapolated Nearest Neighbor
+# DLENN
+Distributed Learning with Extrapolated Nearest Neighbor
