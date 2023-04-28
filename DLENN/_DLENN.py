@@ -3,13 +3,13 @@ import math
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import mean_squared_error
-rom sklearn.model_selection import KFold
+from sklearn.model_selection import KFold
 
 class DLENN(object):
     def __init__(
         self,
         weighting_scheme = "extrapolated",
-        n_machine = 1,
+        n_machine_per_order = 1,
         order = 1,
         lamda = 1.0,
         k = 2,
@@ -23,32 +23,56 @@ class DLENN(object):
         self.k = k
         self.random_state = random_state
         
-        self.order_constant_vec = np.array([i + 1 for i in range(self.order)] )
-        self.k_vec = np.repeat(self.order_constant_vec * self.k, self.n_machine_per_order)
-
+        
     def fit(self, X, y):
         
-        kfolder = KFold(n_splits = self.n_machine_per_order * self.order , random_state = self.random_state, shuffle = True)
-
-        self.regressor_vec = []
-        self.dim = X_vec[0].shape[1]
         
-        for i, (_, test_index) in enumerate(kfolder.split(X)):
-            self.regressor_vec.append( 
-                KNeighborsRegressor(n_neighbors = self.k_vec[i]).fit(X[test_index, :], y[test_index])
-            )
+        
+        kfolder = KFold(n_splits = self.n_machine_per_order * (self.order + 1), random_state = self.random_state, shuffle = True)
+
+        
+        
+        self.regressor_vec = []
+        self.dim = X.shape[1]
         
         if self.weighting_scheme == "uniform":
-            self.weights = np.repeat(1 / len(self.regressor_vec), len(self.regressor_vec))
+            self.weights = np.repeat(1 / (self.order + 1) / self.n_machine_per_order, int((self.order + 1) * self.n_machine_per_order))
+            for i, (_, test_index) in enumerate(kfolder.split(X)):
+                self.regressor_vec.append( 
+                    KNeighborsRegressor(n_neighbors = min(self.k, test_index.shape[0]) ).fit(X[test_index, :], y[test_index])
+                )
+            
+        
+        
         elif self.weighting_scheme == "extrapolated":
-            r_mat = np.array([ [k**(- 2 * i / self.dim) for i in range(self.order)] for k in self.k_vec])
-            self.weights = (np.linalg.inv(r_mat.T @ r_mat + self.lamda * np.eye(self.smooth_order)) @ r_mat.T)[0]
+            
+            
+            
+            self.order_constant_vec = np.array([i + 1 for i in range(self.order + 1)] )
+            self.k_vec = np.repeat((self.order_constant_vec * self.k).astype(int), self.n_machine_per_order)
+            
+            
+            for i, (_, test_index) in enumerate(kfolder.split(X)):
+                self.regressor_vec.append( 
+                    KNeighborsRegressor(n_neighbors = min(self.k_vec[i], test_index.shape[0])).fit(X[test_index, :], y[test_index])
+                )
+                
+                
+                
+            
+                
+            r_mat = np.array([ [k**(- 2 * i / self.dim) for i in range(self.order + 1)] for k in self.k_vec])
+            
+       
+            self.weights = (np.linalg.inv(r_mat.T @ r_mat + self.lamda * np.eye(self.order + 1)) @ r_mat.T)[0]
             if self.weights.sum():
                 self.weights = self.weights / self.weights.sum()
             else:
                 self.weights[self.weights < 0] = 0
                 self.weights = self.weights / self.weights.sum()
                 
+                
+            
         return self
     
     
@@ -67,7 +91,7 @@ class DLENN(object):
             Parameter names mapped to their values.
         """
         out = dict()
-        for key in ['n_machine',"lamda","weighting_scheme","order","k"]:
+        for key in ['n_machine_per_order',"lamda","weighting_scheme","order","k"]:
             value = getattr(self, key, None)
             if deep and hasattr(value, 'get_params'):
                 deep_items = value.get_params().items()
