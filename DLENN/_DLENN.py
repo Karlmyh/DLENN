@@ -1,6 +1,8 @@
 import numpy as np
 import math
 from sklearn.neighbors import KNeighborsRegressor
+from ._regressor import RadiusNeighborsRegressor
+from sklearn.neighbors import KDTree
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold
@@ -14,6 +16,8 @@ class DLENN(object):
         lamda = 1.0,
         k = 2,
         random_state = 1,
+        increment = 0.1,
+        use_radius = True,
     ):
         
         self.weighting_scheme = weighting_scheme
@@ -22,7 +26,8 @@ class DLENN(object):
         self.lamda = lamda
         self.k = k
         self.random_state = random_state
-        
+        self.increment = increment
+        self.use_radius = use_radius
         
     def fit(self, X, y):
         
@@ -46,24 +51,49 @@ class DLENN(object):
         
         elif self.weighting_scheme == "extrapolated":
             
+            self.order_constant_vec = np.array([self.increment * i + 1 for i in range(self.order + 1)] )
             
-            
-            self.order_constant_vec = np.array([i + 1 for i in range(self.order + 1)] )
-            self.k_vec = np.repeat((self.order_constant_vec * self.k).astype(int), self.n_machine_per_order)
-            
-            
-            for i, (_, test_index) in enumerate(kfolder.split(X)):
-                self.regressor_vec.append( 
-                    KNeighborsRegressor(n_neighbors = min(self.k_vec[i], test_index.shape[0])).fit(X[test_index, :], y[test_index])
-                )
+            ######## if use radius prediction ########
+            if self.use_radius:
+#                 # compute average k distance 
+#                 avg_dist = 0
+#                 max_dist = 0
+#                 for i, (_, test_index) in enumerate(kfolder.split(X)):
+#                     tree = KDTree(X[test_index, :])
+#                     distance_vec,_ = tree.query(X[test_index, :], self.k + 1)
+#                     avg_dist += distance_vec[:,-1].mean()
+#                     if distance_vec[:,-1].mean() > max_dist:
+#                         max_dist = distance_vec[:,-1].mean()
+#                 avg_dist /= self.n_machine_per_order * (self.order + 1)
                 
+                # compute the radius vector
+                self.radius_vec = np.repeat((self.order_constant_vec ).astype(int), self.n_machine_per_order)
+               
                 
+                # get regressor sequence
+                for i, (_, test_index) in enumerate(kfolder.split(X)):
+                    regressor = RadiusNeighborsRegressor(n_neighbors = self.k,
+                                                         ratio = self.radius_vec[i],
+                                                        ).fit(X[test_index, :], y[test_index])
+                    self.regressor_vec.append( regressor )
                 
-            
+                # get r matrix
+                r_mat = np.array([ [r**( 2 * i ) for i in range(self.order + 1)] for r in self.radius_vec])
+            ######## if use neighbor number prediction ######## 
+            else:
+                # compute the neighbor number vector
+                self.k_vec = np.repeat((self.order_constant_vec * self.k).astype(int), self.n_machine_per_order)
                 
-            r_mat = np.array([ [k**(- 2 * i / self.dim) for i in range(self.order + 1)] for k in self.k_vec])
-            
-       
+                # get regressor sequence
+                for i, (_, test_index) in enumerate(kfolder.split(X)):
+                    regressor = KNeighborsRegressor(n_neighbors = min(self.k_vec[i], 
+                                                    test_index.shape[0])).fit(X[test_index, :], y[test_index])
+                    self.regressor_vec.append( regressor )
+                    
+                # get r matrix
+                r_mat = np.array([ [k**( 2 * i / self.dim) for i in range(self.order + 1)] for k in self.k_vec])
+    
+            # compute weights according to r matrix
             self.weights = (np.linalg.inv(r_mat.T @ r_mat + self.lamda * np.eye(self.order + 1)) @ r_mat.T)[0]
             if self.weights.sum():
                 self.weights = self.weights / self.weights.sum()
@@ -91,7 +121,8 @@ class DLENN(object):
             Parameter names mapped to their values.
         """
         out = dict()
-        for key in ['n_machine_per_order',"lamda","weighting_scheme","order","k"]:
+        for key in ['n_machine_per_order',"lamda","weighting_scheme","order","k",
+                   "increment", "use_radius"]:
             value = getattr(self, key, None)
             if deep and hasattr(value, 'get_params'):
                 deep_items = value.get_params().items()

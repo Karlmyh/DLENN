@@ -22,7 +22,7 @@ repeat_times = 20
 log_file = "./results/simulation.csv"
 
 
-n_machine_per_order_vec = [2, 4, 6, 8]
+n_machine_per_order_vec = [1, 2, 4, 6, 8]
 order_vec = [1, 2]
 distribution_vec = [1,2,3,4]
 
@@ -46,8 +46,8 @@ for n_machine_per_order in n_machine_per_order_vec:
                      "n_machine_per_order" : [n_machine_per_order],
                      "weighting_scheme" : ["uniform"],
                      "order" : [order],
-                     "k": [2,5,10,15,20,30,40,50,75,100]}
-                cv_regressor = GridSearchCV(estimator = DLENN(), param_grid = params, cv = 5, n_jobs = 10)
+                     "k": [5,10,30,50,100,200,400,800]}
+                cv_regressor = GridSearchCV(estimator = DLENN(), param_grid = params, cv = 5, n_jobs = 50)
                 _ = cv_regressor.fit(X_train, y_train)
                 model = cv_regressor.best_estimator_
 
@@ -68,9 +68,11 @@ for n_machine_per_order in n_machine_per_order_vec:
                      "n_machine_per_order" : [n_machine_per_order],
                      "weighting_scheme" : ["extrapolated"],
                      "order" : [order],
-                     "lamda": [0.0001,0.0005,0.001,0.002,0.005,0.01,0.02,0.05,0.1,0.2,0.5],
-                     "k": [2,5,10,15,20,30,40,50,75,100]}
-                cv_regressor = GridSearchCV(estimator = DLENN(), param_grid = params, cv = 5, n_jobs = 10)
+                     "lamda": [0.0001,0.001,0.01,0.1],
+                     "k": [5,10,30,50,100,200,400,800],
+                        "increment":[0,0.1,1],
+                        "use_radius":[True],}
+                cv_regressor = GridSearchCV(estimator = DLENN(), param_grid = params, cv = 5, n_jobs = 60)
                 _ = cv_regressor.fit(X_train, y_train)
                 model = cv_regressor.best_estimator_
                 time_start = time()
@@ -85,7 +87,7 @@ for n_machine_per_order in n_machine_per_order_vec:
 
                 # knn
                 params = {"n_neighbors":[5,10,15,20,30,40,60,80,100,120,150,200,250,300,350,400,450]}
-                cv_regressor = GridSearchCV(estimator = KNeighborsRegressor(), param_grid = params, cv = 5)
+                cv_regressor = GridSearchCV(estimator = KNeighborsRegressor(), param_grid = params, cv = 5,n_jobs = 45)
                 _ = cv_regressor.fit(X_train, y_train)
                 model = cv_regressor.best_estimator_
                 time_start = time()
