@@ -20,6 +20,8 @@ class DLENN(object):
         use_radius = True,
     ):
         
+        print("00")
+        
         self.weighting_scheme = weighting_scheme
         self.n_machine_per_order = n_machine_per_order
         self.order = order
@@ -29,13 +31,15 @@ class DLENN(object):
         self.increment = increment
         self.use_radius = use_radius
         
+        print("01")
+        
     def fit(self, X, y):
         
         
-        
+        print("1")
         kfolder = KFold(n_splits = self.n_machine_per_order * (self.order + 1), random_state = self.random_state, shuffle = True)
 
-        
+        print("2")
         
         self.regressor_vec = []
         self.dim = X.shape[1]
@@ -46,6 +50,8 @@ class DLENN(object):
                 self.regressor_vec.append( 
                     KNeighborsRegressor(n_neighbors = min(self.k, test_index.shape[0]) ).fit(X[test_index, :], y[test_index])
                 )
+                
+            print("3")
             
         
         
@@ -101,7 +107,7 @@ class DLENN(object):
                 self.weights[self.weights < 0] = 0
                 self.weights = self.weights / self.weights.sum()
                 
-                
+            print("4")
             
         return self
     
